@@ -289,7 +289,7 @@ static int rxrpc_krb5_decode_tagged_data(struct krb5_tagged_data *td,
 					 unsigned int *_toklen)
 {
 	const __be32 *xdr = *_xdr;
-	unsigned int toklen = *_toklen, len, paddedlen;;
+	unsigned int toklen = *_toklen, len, paddedlen;
 
 	/* there must be at least one tag and one length word */
 	if (toklen <= 8)
