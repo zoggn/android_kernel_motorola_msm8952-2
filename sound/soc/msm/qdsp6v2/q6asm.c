@@ -144,6 +144,11 @@ static ssize_t audio_output_latency_dbgfs_read(struct file *file,
 		pr_err("%s: out_buffer is null\n", __func__);
 		return 0;
 	}
+	if (count < OUT_BUFFER_SIZE) {
+		pr_err("%s: read size %d exceeds buf size %zd\n", __func__,
+						OUT_BUFFER_SIZE, count);
+		return 0;
+	}
 	snprintf(out_buffer, OUT_BUFFER_SIZE, "%ld,%ld,%ld,%ld,%ld,%ld,",\
 		out_cold_tv.tv_sec, out_cold_tv.tv_usec, out_warm_tv.tv_sec,\
 		out_warm_tv.tv_usec, out_cont_tv.tv_sec, out_cont_tv.tv_usec);
@@ -195,6 +200,11 @@ static ssize_t audio_input_latency_dbgfs_read(struct file *file,
 {
 	if (in_buffer == NULL) {
 		pr_err("%s: in_buffer is null\n", __func__);
+		return 0;
+	}
+	if (count < IN_BUFFER_SIZE) {
+		pr_err("%s: read size %d exceeds buf size %zd\n", __func__,
+						IN_BUFFER_SIZE, count);
 		return 0;
 	}
 	snprintf(in_buffer, IN_BUFFER_SIZE, "%ld,%ld,",\
@@ -921,14 +931,16 @@ void q6asm_audio_client_free(struct audio_client *ac)
 		}
 	}
 
-	apr_deregister(ac->apr2);
-	ac->apr2 = NULL;
-	apr_deregister(ac->apr);
-	ac->apr = NULL;
-	ac->mmap_apr = NULL;
-	rtac_set_asm_handle(ac->session, ac->apr);
+	rtac_set_asm_handle(ac->session, NULL);
+	if (!atomic_read(&ac->reset)) {
+		apr_deregister(ac->apr2);
+		apr_deregister(ac->apr);
+		q6asm_mmap_apr_dereg();
+		ac->apr2 = NULL;
+		ac->apr = NULL;
+		ac->mmap_apr = NULL;
+	}
 	q6asm_session_free(ac);
-	q6asm_mmap_apr_dereg();
 
 	pr_debug("%s: APR De-Register\n", __func__);
 
@@ -1347,7 +1359,6 @@ static int32_t q6asm_srvc_callback(struct apr_client_data *data, void *priv)
 			}
 			pr_debug("%s: Clearing custom topology\n", __func__);
 		}
-		this_mmap.apr = NULL;
 
 		cal_utils_clear_cal_block_q6maps(ASM_MAX_CAL_TYPES, cal_data);
 		common_client.mmap_apr = NULL;
@@ -1589,8 +1600,10 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 
 	if (data->opcode == RESET_EVENTS) {
 		atomic_set(&ac->reset, 1);
-		if (ac->apr == NULL)
+		if (ac->apr == NULL) {
 			ac->apr = ac->apr2;
+			ac->apr2 = NULL;
+		}
 		pr_debug("%s: Reset event is received: %d %d apr[%pK]\n",
 			__func__,
 			data->reset_event, data->reset_proc, ac->apr);

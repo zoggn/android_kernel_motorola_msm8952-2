@@ -2193,6 +2193,11 @@ static int mdss_mdp_ctl_fbc_enable(int enable,
 
 	fbc = &pdata->fbc;
 
+	if (!fbc->enabled) {
+		pr_debug("FBC not enabled\n");
+		return -EINVAL;
+	}
+
 	if (mixer->num == MDSS_MDP_INTF_LAYERMIXER0 ||
 			mixer->num == MDSS_MDP_INTF_LAYERMIXER1) {
 		pr_debug("Mixer supports FBC.\n");
@@ -3790,8 +3795,6 @@ int mdss_mdp_ctl_update_fps(struct mdss_mdp_ctl *ctl)
 			__func__, new_fps);
 		goto exit;
 	}
-
-	mdss_mdp_ctl_perf_update(ctl, 1);
 
 	ATRACE_BEGIN("config_fps");
 	ret = ctl->ops.config_fps_fnc(ctl, new_fps);

@@ -1113,15 +1113,10 @@ static void apps_ipa_tx_complete_notify(void *priv,
 				wwan_ptr->outstanding_low);
 		netif_wake_queue(wwan_ptr->net);
 	}
-
-	if (atomic_read(&wwan_ptr->outstanding_pkts) == 0)
-		ipa_rm_inactivity_timer_release_resource(
-			IPA_RM_RESOURCE_WWAN_0_PROD);
 	__netif_tx_unlock_bh(netdev_get_tx_queue(dev, 0));
 	dev_kfree_skb_any(skb);
-	if (atomic_read(&wwan_ptr->outstanding_pkts) == 0)
-		ipa_rm_inactivity_timer_release_resource(
-			IPA_RM_RESOURCE_WWAN_0_PROD);
+	ipa_rm_inactivity_timer_release_resource(
+		IPA_RM_RESOURCE_WWAN_0_PROD);
 	return;
 }
 
@@ -1261,8 +1256,6 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 
 	/*  Extended IOCTLs  */
 	case RMNET_IOCTL_EXTENDED:
-		if (!ns_capable(dev_net(dev)->user_ns, CAP_NET_ADMIN))
-			return -EPERM;
 		IPAWANDBG("get ioctl: RMNET_IOCTL_EXTENDED\n");
 		if (copy_from_user(&extend_ioctl_data,
 			(u8 *)ifr->ifr_ifru.ifru_data,
@@ -1547,6 +1540,7 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				IPAWANERR("Failed to allocate memory.\n");
 				return -ENOMEM;
 			}
+			extend_ioctl_data.u.if_name[IFNAMSIZ-1] = '\0';
 			len = sizeof(wan_msg->upstream_ifname) >
 			sizeof(extend_ioctl_data.u.if_name) ?
 				sizeof(extend_ioctl_data.u.if_name) :
@@ -2807,6 +2801,7 @@ static int __init ipa_wwan_init(void)
 	atomic_set(&is_ssr, 0);
 
 	mutex_init(&ipa_to_apps_pipe_handle_guard);
+	mutex_init(&add_mux_channel_lock);
 	ipa_to_apps_hdl = -1;
 	mutex_init(&add_mux_channel_lock);
 

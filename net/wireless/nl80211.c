@@ -459,6 +459,14 @@ nl80211_match_policy[NL80211_SCHED_SCAN_MATCH_ATTR_MAX + 1] = {
 	[NL80211_SCHED_SCAN_MATCH_ATTR_RSSI] = { .type = NLA_U32 },
 };
 
+/* policy for packet pattern attributes */
+static const struct nla_policy
+nl80211_packet_pattern_policy[MAX_NL80211_WOWLAN_PKTPAT + 1] = {
+	[NL80211_WOWLAN_PKTPAT_MASK] = { .type = NLA_BINARY, },
+	[NL80211_WOWLAN_PKTPAT_PATTERN] = { .type = NLA_BINARY, },
+	[NL80211_WOWLAN_PKTPAT_OFFSET] = { .type = NLA_U32 },
+};
+
 static int nl80211_prepare_wdev_dump(struct sk_buff *skb,
 				     struct netlink_callback *cb,
 				     struct cfg80211_registered_device **rdev,
@@ -5457,21 +5465,6 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 	return err;
 }
 
-static int nl80211_abort_scan(struct sk_buff *skb, struct genl_info *info)
-{
-	struct cfg80211_registered_device *rdev = info->user_ptr[0];
-	struct wireless_dev *wdev = info->user_ptr[1];
-
-	if (!rdev->ops->abort_scan)
-		return -EOPNOTSUPP;
-
-	if (!rdev->scan_req)
-		return -ENOENT;
-
-	rdev_abort_scan(rdev, wdev);
-	return 0;
-}
-
 static int nl80211_start_sched_scan(struct sk_buff *skb,
 				    struct genl_info *info)
 {
@@ -8212,7 +8205,7 @@ static int nl80211_set_wowlan(struct sk_buff *skb, struct genl_info *info)
 		nla_for_each_nested(pat, tb[NL80211_WOWLAN_TRIG_PKT_PATTERN],
 				    rem) {
 			nla_parse(pat_tb, MAX_NL80211_WOWLAN_PKTPAT,
-				  nla_data(pat), nla_len(pat), NULL);
+				  nla_data(pat), nla_len(pat), nl80211_packet_pattern_policy);
 			err = -EINVAL;
 			if (!pat_tb[NL80211_WOWLAN_PKTPAT_MASK] ||
 			    !pat_tb[NL80211_WOWLAN_PKTPAT_PATTERN])
@@ -8305,9 +8298,6 @@ static int nl80211_set_rekey_data(struct sk_buff *skb, struct genl_info *info)
 	if (err)
 		return err;
 
-	if (!tb[NL80211_REKEY_DATA_REPLAY_CTR] || !tb[NL80211_REKEY_DATA_KEK] ||
-	    !tb[NL80211_REKEY_DATA_KCK])
-		return -EINVAL;
 	if (nla_len(tb[NL80211_REKEY_DATA_REPLAY_CTR]) != NL80211_REPLAY_CTR_LEN)
 		return -ERANGE;
 	if (nla_len(tb[NL80211_REKEY_DATA_KEK]) != NL80211_KEK_LEN)
@@ -9077,14 +9067,6 @@ static struct genl_ops nl80211_ops[] = {
 	{
 		.cmd = NL80211_CMD_TRIGGER_SCAN,
 		.doit = nl80211_trigger_scan,
-		.policy = nl80211_policy,
-		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |
-				  NL80211_FLAG_NEED_RTNL,
-	},
-	{
-		.cmd = NL80211_CMD_ABORT_SCAN,
-		.doit = nl80211_abort_scan,
 		.policy = nl80211_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WDEV_UP |

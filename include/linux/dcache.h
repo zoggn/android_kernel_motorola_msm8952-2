@@ -247,8 +247,6 @@ extern struct dentry * d_make_root(struct inode *);
 /* <clickety>-<click> the ramfs-type tree */
 extern void d_genocide(struct dentry *);
 
-extern void d_tmpfile(struct dentry *, struct inode *);
-
 extern struct dentry *d_find_alias(struct inode *);
 extern void d_prune_aliases(struct inode *);
 
@@ -413,13 +411,13 @@ static inline bool d_mountpoint(struct dentry *dentry)
 	return dentry->d_flags & DCACHE_MOUNTED;
 }
 
-static inline bool d_is_su(const struct dentry *dentry)
-{
-	return dentry &&
-	       dentry->d_name.len == 2 &&
-	       !memcmp(dentry->d_name.name, "su", 2);
-}
-
 extern int sysctl_vfs_cache_pressure;
+
+struct name_snapshot {
+       const char *name;
+       char inline_name[DNAME_INLINE_LEN];
+};
+void take_dentry_name_snapshot(struct name_snapshot *, struct dentry *);
+void release_dentry_name_snapshot(struct name_snapshot *);
 
 #endif	/* __LINUX_DCACHE_H */

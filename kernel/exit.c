@@ -53,7 +53,6 @@
 #include <linux/oom.h>
 #include <linux/writeback.h>
 #include <linux/shm.h>
-#include <linux/cpufreq.h>
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
@@ -778,10 +777,6 @@ void do_exit(long code)
 	exit_signals(tsk);  /* sets PF_EXITING */
 
 	sched_exit(tsk);
-
-	if (tsk->flags & PF_SU) {
-		su_exit();
-	}
 
 	/*
 	 * tsk->flags are checked in the futex code to protect against

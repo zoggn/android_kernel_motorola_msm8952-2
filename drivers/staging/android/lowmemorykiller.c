@@ -62,6 +62,12 @@
 #define CREATE_TRACE_POINTS
 #include "trace/lowmemorykiller.h"
 
+#ifdef CONFIG_HIGHMEM
+/* to enable lowmemorykiller tune */
+static int enable_tune = 0;
+module_param_named(enable_tune, enable_tune, int, 0644);
+#endif
+
 static uint32_t lowmem_debug_level = 1;
 static short lowmem_adj[6] = {
 	0,
@@ -335,7 +341,7 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc,
 	enum zone_type high_zoneidx, classzone_idx;
 	unsigned long balance_gap;
 	int use_cma_pages;
-        struct zone_avail *za;
+	struct zone_avail *za;
 
 	gfp_mask = sc->gfp_mask;
 	adjust_gfp_mask(&gfp_mask);
@@ -345,7 +351,7 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc,
 	first_zones_zonelist(zonelist, high_zoneidx, NULL, &preferred_zone);
 	classzone_idx = zone_idx(preferred_zone);
 	use_cma_pages = can_use_cma_pages(gfp_mask);
-        za = &zall[zone_to_nid(preferred_zone)][classzone_idx];
+	za = &zall[zone_to_nid(preferred_zone)][classzone_idx];
 
 	balance_gap = min(low_wmark_pages(preferred_zone),
 			  (preferred_zone->present_pages +
@@ -378,7 +384,7 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc,
 			}
 		} else {
 			*other_free -= za->free;
-                        za->free = 0;
+			za->free = 0;
 		}
 
 		lowmem_print(4, "lowmem_shrink of kswapd tunning for highmem "
@@ -421,7 +427,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int other_free;
 	int other_file;
 	unsigned long nr_to_scan = sc->nr_to_scan;
-        struct zone_avail zall[MAX_NUMNODES][MAX_NR_ZONES];
+	struct zone_avail zall[MAX_NUMNODES][MAX_NR_ZONES];
 
 	rcu_read_lock();
 	tsk = current->group_leader;
@@ -448,6 +454,10 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		other_file = 0;
 
 	memset(zall, 0, sizeof(zall));
+
+#ifdef CONFIG_HIGHMEM
+	if (enable_tune)
+#endif
 	tune_lmk_param(&other_free, &other_file, sc, zall);
 
 	if (lowmem_adj_size < array_size)

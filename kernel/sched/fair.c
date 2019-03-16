@@ -3517,13 +3517,13 @@ static inline void update_entity_load_avg(struct sched_entity *se,
 	 */
 	if (entity_is_task(se)) {
 		now = cfs_rq_clock_task(cfs_rq);
-		if (sched_use_pelt && se->on_rq)
+		if (se->on_rq)
 			dec_hmp_sched_stats_fair(rq_of(cfs_rq), task_of(se));
 	} else
 		now = cfs_rq_clock_task(group_cfs_rq(se));
 
 	decayed = __update_entity_runnable_avg(cpu, now, &se->avg, se->on_rq);
-	if (sched_use_pelt && entity_is_task(se) && se->on_rq)
+	if (entity_is_task(se) && se->on_rq)
 		inc_hmp_sched_stats_fair(rq_of(cfs_rq), task_of(se));
 
 	if (!decayed)
@@ -5544,10 +5544,6 @@ find_idlest_cpu(struct sched_group *group, struct task_struct *p, int this_cpu)
 	int idlest = -1;
 	int i;
 
-	/* Check if we have any choice: */
-	if (group->group_weight == 1)
-		return cpumask_first(sched_group_cpus(group));
-
 	/* Traverse only the allowed CPUs */
 	for_each_cpu_and(i, sched_group_cpus(group), tsk_cpus_allowed(p)) {
 		load = weighted_cpuload(i);
@@ -6369,13 +6365,6 @@ static int move_tasks(struct lb_env *env)
 
 redo:
 	while (!list_empty(tasks)) {
-		/*
-		 * We don't want to steal all, otherwise we may be treated likewise,
-		 * which could at worst lead to a livelock crash.
-		 */
-		if (env->idle != CPU_NOT_IDLE && env->src_rq->nr_running <= 1)
-			break;
-
 		p = list_first_entry(tasks, struct task_struct, se.group_node);
 
 		env->loop++;
@@ -8175,7 +8164,7 @@ void nohz_balance_enter_idle(int cpu)
 	set_bit(NOHZ_TICK_STOPPED, nohz_flags(cpu));
 }
 
-static int sched_ilb_notifier(struct notifier_block *nfb,
+static int __cpuinit sched_ilb_notifier(struct notifier_block *nfb,
 					unsigned long action, void *hcpu)
 {
 	switch (action & ~CPU_TASKS_FROZEN) {

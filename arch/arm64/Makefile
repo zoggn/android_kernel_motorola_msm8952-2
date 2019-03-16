@@ -31,25 +31,6 @@ AS		+= -EL
 LD		+= -EL
 endif
 
-# Cortex-A53 optimizations
-arch-$(CONFIG_ARCH_MSM8916)	:= $(call cc-option,-mcpu=cortex-a53+crc+crypto,-march=armv8-a+crc+crypto)
-tune-$(CONFIG_ARCH_MSM8916)	:= -mtune=cortex-a53
-arch-$(CONFIG_ARCH_MSM8917)	:= $(call cc-option,-mcpu=cortex-a53+crc+crypto,-march=armv8-a+crc+crypto)
-tune-$(CONFIG_ARCH_MSM8917)	:= -mtune=cortex-a53
-arch-$(CONFIG_ARCH_MSM8920)	:= $(call cc-option,-mcpu=cortex-a53+crc+crypto,-march=armv8-a+crc+crypto)
-tune-$(CONFIG_ARCH_MSM8920)	:= -mtune=cortex-a53
-arch-$(CONFIG_ARCH_MSM8937)	:= $(call cc-option,-mcpu=cortex-a53+crc+crypto,-march=armv8-a+crc+crypto)
-tune-$(CONFIG_ARCH_MSM8937)	:= -mtune=cortex-a53
-arch-$(CONFIG_ARCH_MSM8940)	:= $(call cc-option,-mcpu=cortex-a53+crc+crypto,-march=armv8-a+crc+crypto)
-tune-$(CONFIG_ARCH_MSM8940)	:= -mtune=cortex-a53
-arch-$(CONFIG_ARCH_MSM8953)	:= $(call cc-option,-mcpu=cortex-a53+crc+crypto,-march=armv8-a+crc+crypto)
-tune-$(CONFIG_ARCH_MSM8953)	:= -mtune=cortex-a53
-arch-$(CONFIG_ARCH_SDM450)	:= $(call cc-option,-mcpu=cortex-a53+crc+crypto,-march=armv8-a+crc+crypto)
-tune-$(CONFIG_ARCH_SDM450)	:= -mtune=cortex-a53
-
-KBUILD_CFLAGS	+= $(arch-y) $(tune-y)
-KBUILD_AFLAGS	+= $(arch-y) $(tune-y)
-
 comma = ,
 
 CHECKFLAGS	+= -D__aarch64__
@@ -69,14 +50,11 @@ core-$(CONFIG_CRYPTO) += arch/arm64/crypto/
 libs-y		:= arch/arm64/lib/ $(libs-y)
 libs-y		+= $(LIBGCC)
 
-suffix_$(CONFIG_KERNEL_GZIP) = gz
-suffix_$(CONFIG_KERNEL_LZ4)  = lz4
-
 # Default target when executing plain make
 ifeq ($(CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE),y)
-KBUILD_IMAGE	:= Image.$(suffix_y)-dtb
+KBUILD_IMAGE	:= Image.gz-dtb
 else
-KBUILD_IMAGE	:= Image.$(suffix_y)
+KBUILD_IMAGE	:= Image.gz
 endif
 
 KBUILD_DTBS	:= dtbs
@@ -85,7 +63,7 @@ all:	$(KBUILD_IMAGE) $(KBUILD_DTBS)
 
 boot := arch/arm64/boot
 
-Image Image.gz Image.lz4: vmlinux
+Image Image.gz: vmlinux
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
 zinstall install: vmlinux
@@ -102,7 +80,7 @@ PHONY += vdso_install
 vdso_install:
 	$(Q)$(MAKE) $(build)=arch/arm64/kernel/vdso $@
 
-Image-dtb Image.gz-dtb Image.lz4-dtb: vmlinux scripts dtbs
+Image.gz-dtb: vmlinux scripts dtbs
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
 # We use MRPROPER_FILES and CLEAN_FILES now
@@ -111,7 +89,6 @@ archclean:
 
 define archhelp
   echo  '* Image.gz      - Compressed kernel image (arch/$(ARCH)/boot/Image.gz)'
-  echo  '* Image.lz4      - Compressed kernel image (arch/$(ARCH)/boot/Image.lz4)'
   echo  '  Image         - Uncompressed kernel image (arch/$(ARCH)/boot/Image)'
   echo  '* dtbs          - Build device tree blobs for enabled boards'
   echo  '  install       - Install uncompressed kernel'

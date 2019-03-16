@@ -10,8 +10,6 @@ config ARM64
 	select ARM64_CPU_SUSPEND
 	select ARM_AMBA
 	select ARM_ARCH_TIMER
-	select HAVE_KERNEL_GZIP
-	select HAVE_KERNEL_LZ4
 	select ARM_GIC
 	select BUILDTIME_EXTABLE_SORT
 	select AUDIT_ARCH_COMPAT_GENERIC
@@ -467,7 +465,9 @@ config SWP_EMULATE
 
 	  If unsure, say Y.
 
-source kernel/Kconfig.hz
+config HZ
+	int
+	default 100
 
 config ARCH_HAS_HOLES_MEMORYMODEL
 	def_bool y if SPARSEMEM
@@ -581,6 +581,22 @@ config SECCOMP
 	  and the task is only allowed to execute a few safe syscalls
 	  defined by each seccomp mode.
 
+config HARDEN_BRANCH_PREDICTOR
+	bool "Harden the branch predictor against aliasing attacks" if EXPERT
+	default y
+	help
+	  Speculation attacks against some high-performance processors rely on
+	  being able to manipulate the branch predictor for a victim context by
+	  executing aliasing branches in the attacker context.  Such attacks
+	  can be partially mitigated against by clearing internal branch
+	  predictor state and limiting the prediction logic in some situations.
+
+	  This config option will take CPU-specific actions to harden the
+	  branch predictor against aliasing attacks and may rely on specific
+	  instruction sequences or control bits being set by the system
+	  firmware.
+
+	  If unsure, say Y.
 
 endmenu
 

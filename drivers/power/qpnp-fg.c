@@ -211,7 +211,7 @@ enum fg_mem_data_index {
 	FG_DATA_CC_CHARGE,
 	FG_DATA_VINT_ERR,
 	FG_DATA_CPRED_VOLTAGE,
-        FG_DATA_CC_COUNTER,
+	FG_DATA_CC_COUNTER,
 	/* values below this only gets read once per profile reload */
 	FG_DATA_BATT_ID,
 	FG_DATA_BATT_ID_INFO,
@@ -265,7 +265,7 @@ static struct fg_mem_data fg_data[FG_DATA_MAX] = {
 	DATA(CC_CHARGE,       0x570,   0,      4,     -EINVAL),
 	DATA(VINT_ERR,        0x560,   0,      4,     -EINVAL),
 	DATA(CPRED_VOLTAGE,   0x540,   0,      2,     -EINVAL),
-        DATA(CC_COUNTER,      0x5BC,   3,      4,     -EINVAL),
+	DATA(CC_COUNTER,      0x5BC,   3,      4,     -EINVAL),
 	DATA(BATT_ID,         0x594,   1,      1,     -EINVAL),
 	DATA(BATT_ID_INFO,    0x594,   3,      1,     -EINVAL),
 };
@@ -2893,24 +2893,12 @@ static int fg_get_cycle_count(struct fg_chip *chip)
 	if (!chip->cyc_ctr.en)
 		return 0;
 
-#ifdef CONFIG_QPNP_LEGACY_CYCLE_COUNT
 	if ((chip->cyc_ctr.id <= 0) || (chip->cyc_ctr.id > BUCKET_COUNT))
 		return -EINVAL;
 
 	mutex_lock(&chip->cyc_ctr.lock);
 	count = chip->cyc_ctr.count[chip->cyc_ctr.id - 1];
 	mutex_unlock(&chip->cyc_ctr.lock);
-#else
-	mutex_lock(&chip->cyc_ctr.lock);
-	{
-	    int i;
-	    count = 0;
-	    for (i = 0 ; i < BUCKET_COUNT; i++)
-		count += chip->cyc_ctr.count[i];
-	    count = DIV_ROUND_CLOSEST(count, 8);
-	}
-	mutex_unlock(&chip->cyc_ctr.lock);
-#endif
 	return count;
 }
 
@@ -3082,13 +3070,13 @@ static int estimate_battery_age(struct fg_chip *chip, int *actual_capacity)
 
 	/* calculate soc_cutoff_new */
 	val = (1000000LL + temp_rs_to_rslow) * battery_esr;
-	val = do_div(val, 1000000);
+	do_div(val, 1000000);
 	ocv_cutoff_new = div64_s64(chip->evaluation_current * val, 1000)
 		+ chip->cutoff_voltage;
 
 	/* calculate soc_cutoff_aged */
 	val = (1000000LL + temp_rs_to_rslow) * esr_actual;
-	val = do_div(val, 1000000);
+	do_div(val, 1000000);
 	ocv_cutoff_aged = div64_s64(chip->evaluation_current * val, 1000)
 		+ chip->cutoff_voltage;
 
@@ -3151,9 +3139,7 @@ static enum power_supply_property fg_power_props[] = {
 	POWER_SUPPLY_PROP_ESR_COUNT,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
-#ifdef CONFIG_QPNP_LEGACY_CYCLE_COUNT
 	POWER_SUPPLY_PROP_CYCLE_COUNT_ID,
-#endif
 	POWER_SUPPLY_PROP_HI_POWER,
 	POWER_SUPPLY_PROP_SOC_REPORTING_READY,
 };
@@ -3208,11 +3194,9 @@ static int fg_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		val->intval = fg_get_cycle_count(chip);
 		break;
-#ifdef CONFIG_QPNP_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 		val->intval = chip->cyc_ctr.id;
 		break;
-#endif
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		val->intval = get_sram_prop_now(chip, FG_DATA_BATT_ID);
 		break;
@@ -3237,14 +3221,14 @@ static int fg_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_NOW_RAW:
 		val->intval = get_sram_prop_now(chip, FG_DATA_CC_CHARGE);
 		break;
-	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		val->intval = get_sram_prop_now(chip, FG_DATA_CC_COUNTER);
-		break;
 	case POWER_SUPPLY_PROP_HI_POWER:
 		val->intval = !!chip->bcl_lpm_disabled;
 		break;
 	case POWER_SUPPLY_PROP_SOC_REPORTING_READY:
 		val->intval = !!chip->profile_loaded;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		val->intval = get_sram_prop_now(chip, FG_DATA_CC_COUNTER);
 		break;
 	default:
 		return -EINVAL;
@@ -3596,11 +3580,11 @@ static void fg_cap_learning_post_process(struct fg_chip *chip)
 
 	max_inc_val = chip->nom_cap_uah
 			* (1000 + chip->learning_data.max_increment);
-	max_inc_val = do_div(max_inc_val, 1000);
+	do_div(max_inc_val, 1000);
 
 	min_dec_val = chip->learning_data.learned_cc_uah
 			* (1000 - chip->learning_data.max_decrement);
-	min_dec_val = do_div(min_dec_val, 1000);
+	do_div(min_dec_val, 1000);
 
 	old_cap = chip->learning_data.learned_cc_uah;
 	if (chip->learning_data.cc_uah > max_inc_val)
@@ -4085,7 +4069,6 @@ static int fg_power_set_property(struct power_supply *psy,
 			schedule_work(&chip->set_resume_soc_work);
 		}
 		break;
-#ifdef CONFIG_QPNP_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 		if ((val->intval > 0) && (val->intval <= BUCKET_COUNT)) {
 			chip->cyc_ctr.id = val->intval;
@@ -4095,7 +4078,6 @@ static int fg_power_set_property(struct power_supply *psy,
 			rc = -EINVAL;
 		}
 		break;
-#endif
 	case POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED:
 		chip->safety_timer_expired = val->intval;
 		schedule_work(&chip->status_change_work);
@@ -4119,9 +4101,7 @@ static int fg_property_is_writeable(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_COOL_TEMP:
 	case POWER_SUPPLY_PROP_WARM_TEMP:
-#ifdef CONFIG_QPNP_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
-#endif
 		return 1;
 	default:
 		break;
@@ -4369,7 +4349,7 @@ static bool is_battery_missing(struct fg_chip *chip)
 	return (fg_batt_sts & BATT_MISSING_STS) ? true : false;
 }
 
-#define FG_EMPTY_DEBOUNCE_MS	10
+#define FG_EMPTY_DEBOUNCE_MS	1500
 static irqreturn_t fg_vbatt_low_handler(int irq, void *_chip)
 {
 	struct fg_chip *chip = _chip;
@@ -4557,16 +4537,14 @@ static irqreturn_t fg_empty_soc_irq_handler(int irq, void *_chip)
 		goto done;
 	}
 
-	pr_info("triggered 0x%x\n", soc_rt_sts);
-
-	if (soc_rt_sts & SOC_EMPTY) {
-		chip->soc_empty = true;
+	if (fg_debug_mask & FG_IRQS)
+		pr_info("triggered 0x%x\n", soc_rt_sts);
+	if (fg_is_batt_empty(chip)) {
 		fg_stay_awake(&chip->empty_check_wakeup_source);
 		schedule_delayed_work(&chip->check_empty_work,
 			msecs_to_jiffies(FG_EMPTY_DEBOUNCE_MS));
 	} else {
 		chip->soc_empty = false;
-                fg_relax(&chip->empty_check_wakeup_source);
 	}
 
 done:
@@ -5448,8 +5426,10 @@ static void check_empty_work(struct work_struct *work)
 			enable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
 			chip->vbat_low_irq_enabled = true;
 		}
-	} else if (chip->soc_empty) {
-		pr_info("EMPTY SOC high\n");
+	} else if (fg_is_batt_empty(chip)) {
+		if (fg_debug_mask & FG_STATUS)
+			pr_info("EMPTY SOC high\n");
+		chip->soc_empty = true;
 		if (chip->power_supply_registered)
 			power_supply_changed(&chip->bms_psy);
 	}

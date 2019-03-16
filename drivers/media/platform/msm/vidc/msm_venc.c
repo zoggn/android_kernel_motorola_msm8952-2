@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1152,7 +1152,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.name = "Set Color space transfer characterstics",
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.minimum = MSM_VIDC_TRANSFER_BT709_5,
-		.maximum = MSM_VIDC_TRANSFER_HLG,
+		.maximum = MSM_VIDC_TRANSFER_BT_2020_12,
 		.default_value = MSM_VIDC_TRANSFER_601_6_625,
 		.step = 1,
 		.qmenu = NULL,
@@ -2523,34 +2523,12 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	}
 	case V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_MODE: {
 		struct v4l2_ctrl *air_mbs, *air_ref, *cir_mbs;
-		bool is_cont_intra_supported = false;
-
 		air_mbs = TRY_GET_CTRL(V4L2_CID_MPEG_VIDC_VIDEO_AIR_MBS);
 		air_ref = TRY_GET_CTRL(V4L2_CID_MPEG_VIDC_VIDEO_AIR_REF);
 		cir_mbs = TRY_GET_CTRL(V4L2_CID_MPEG_VIDC_VIDEO_CIR_MBS);
 
-		is_cont_intra_supported =
-		(inst->fmts[CAPTURE_PORT]->fourcc == V4L2_PIX_FMT_H264) ||
-		(inst->fmts[CAPTURE_PORT]->fourcc == V4L2_PIX_FMT_HEVC);
-
-		if (is_cont_intra_supported) {
-			if (air_mbs || air_ref || cir_mbs)
-				enable.enable = true;
-			else
-				enable.enable = false;
-
-			rc = call_hfi_op(hdev, session_set_property,
-				(void *)inst->session,
-				HAL_PARAM_VENC_CONSTRAINED_INTRA_PRED, &enable);
-			if (rc) {
-				dprintk(VIDC_ERR,
-					"Failed to set constrained intra\n");
-				rc = -EINVAL;
-				break;
-			}
-		}
-
-		property_id = HAL_PARAM_VENC_INTRA_REFRESH;
+		property_id =
+			HAL_PARAM_VENC_INTRA_REFRESH;
 
 		intra_refresh.mode = ctrl->val;
 		intra_refresh.air_mbs = air_mbs->val;
@@ -3389,7 +3367,6 @@ int msm_venc_s_parm(struct msm_vidc_inst *inst, struct v4l2_streamparm *a)
 	u64 us_per_frame = 0;
 	void *pdata;
 	int rc = 0, fps = 0;
-	u64 base_fps = 0;
 	struct hal_frame_rate frame_rate;
 	struct hfi_device *hdev;
 
@@ -3425,10 +3402,8 @@ int msm_venc_s_parm(struct msm_vidc_inst *inst, struct v4l2_streamparm *a)
 		goto exit;
 	}
 
-	base_fps = USEC_PER_SEC;
-	do_div(base_fps, us_per_frame);
-
-	fps = (int)base_fps;
+	fps = USEC_PER_SEC;
+	do_div(fps, us_per_frame);
 
 	if ((fps % 15 == 14) || (fps % 24 == 23))
 		fps = fps + 1;

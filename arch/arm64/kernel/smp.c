@@ -39,6 +39,7 @@
 
 #include <asm/atomic.h>
 #include <asm/cacheflush.h>
+#include <asm/cpufeature.h>
 #include <asm/cputype.h>
 #include <asm/cpu_ops.h>
 #include <asm/mmu_context.h>
@@ -74,7 +75,7 @@ enum ipi_msg_type {
  * Boot a secondary CPU, and assign it the specified idle task.
  * This also gives us the initial stack to use for this CPU.
  */
-static int boot_secondary(unsigned int cpu, struct task_struct *idle)
+static int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
 	if (cpu_ops[cpu]->cpu_boot)
 		return cpu_ops[cpu]->cpu_boot(cpu);
@@ -84,7 +85,7 @@ static int boot_secondary(unsigned int cpu, struct task_struct *idle)
 
 static DECLARE_COMPLETION(cpu_running);
 
-int __cpu_up(unsigned int cpu, struct task_struct *idle)
+int __cpuinit __cpu_up(unsigned int cpu, struct task_struct *idle)
 {
 	int ret;
 
@@ -129,7 +130,7 @@ static void smp_store_cpu_info(unsigned int cpuid)
  * This is the secondary CPU boot entry.  We're using this CPUs
  * idle thread stack, but a set of temporary page tables.
  */
-asmlinkage void secondary_start_kernel(void)
+asmlinkage void __cpuinit secondary_start_kernel(void)
 {
 	struct mm_struct *mm = &init_mm;
 	unsigned int cpu = smp_processor_id();
@@ -157,6 +158,11 @@ asmlinkage void secondary_start_kernel(void)
 
 	if (cpu_ops[cpu]->cpu_postboot)
 		cpu_ops[cpu]->cpu_postboot();
+
+#ifdef CONFIG_HARDEN_BRANCH_PREDICTOR
+	if (sys_psci_bp_hardening_initialised)
+		enable_psci_bp_hardening(NULL);
+#endif
 
 	/*
 	 * Enable GIC and timers.
@@ -313,6 +319,7 @@ void __ref cpu_die(void)
 void __init smp_cpus_done(unsigned int max_cpus)
 {
 	pr_info("SMP: Total of %d processors activated.\n", num_online_cpus());
+	setup_cpu_features();
 }
 
 void __init smp_prepare_boot_cpu(void)
@@ -590,18 +597,15 @@ static unsigned long backtrace_flag;
 
 static void smp_send_all_cpu_backtrace(void)
 {
-	unsigned int this_cpu;
+	unsigned int this_cpu = smp_processor_id();
 	int i;
 
-	this_cpu = get_cpu();;
-	if (test_and_set_bit(0, &backtrace_flag)) {
+	if (test_and_set_bit(0, &backtrace_flag))
 		/*
 		 * If there is already a trigger_all_cpu_backtrace() in progress
 		 * (backtrace_flag == 1), don't output double cpu dump infos.
 		 */
-		put_cpu();
 		return;
-	}
 
 	cpumask_copy(&backtrace_mask, cpu_online_mask);
 	cpu_clear(this_cpu, backtrace_mask);
@@ -613,7 +617,6 @@ static void smp_send_all_cpu_backtrace(void)
 	if (!cpus_empty(backtrace_mask))
 		smp_cross_call_common(&backtrace_mask, IPI_CPU_BACKTRACE);
 
-	put_cpu();
 	/* Wait for up to 10 seconds for all other CPUs to do the backtrace */
 	for (i = 0; i < 10 * 1000; i++) {
 		if (cpumask_empty(&backtrace_mask))

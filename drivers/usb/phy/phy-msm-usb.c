@@ -81,10 +81,10 @@
 
 #define USB_DEFAULT_SYSTEM_CLOCK 80000000	/* 80 MHz */
 
-#define MAX_CHGR_RETRY_COUNT    3
-
 #define PM_QOS_SAMPLE_SEC	2
 #define PM_QOS_THRESHOLD	400
+
+#define MAX_CHGR_RETRY_COUNT    3
 
 enum msm_otg_phy_reg_mode {
 	USB_PHY_REG_OFF,
@@ -3604,7 +3604,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 					msm_otg_start_peripheral(otg, 1);
 					otg->phy->state =
 						OTG_STATE_B_PERIPHERAL;
-                                        motg->falsesdp_retry_count = 0;
+					motg->falsesdp_retry_count = 0;
 					mod_timer(&motg->chg_check_timer,
 							CHG_RECHECK_DELAY);
 					break;
@@ -3640,7 +3640,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			dcp = (motg->chg_type == USB_DCP_CHARGER);
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
 			motg->chg_type = USB_INVALID_CHARGER;
-                        motg->falsesdp_retry_count = 0;
+			motg->falsesdp_retry_count = 0;
 			msm_otg_notify_charger(motg, 0);
 			if (dcp) {
 				if (motg->ext_chg_active == DEFAULT)
@@ -3738,7 +3738,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 					motg->inputs, otg->phy->state);
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
 			motg->chg_type = USB_INVALID_CHARGER;
-                        motg->falsesdp_retry_count = 0;
+			motg->falsesdp_retry_count = 0;
 			msm_otg_notify_charger(motg, 0);
 			srp_reqd = otg->gadget->otg_srp_reqd;
 			msm_otg_start_peripheral(otg, 0);
@@ -3766,7 +3766,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			 */
 			udelay(1000);
 			msm_otg_start_peripheral(otg, 0);
-                        motg->falsesdp_retry_count = 0;
+			motg->falsesdp_retry_count = 0;
 			otg->phy->state = OTG_STATE_B_WAIT_ACON;
 			/*
 			 * start HCD even before A-device enable

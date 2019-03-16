@@ -1520,7 +1520,7 @@ static void armpmu_hotplug_disable(void *parm_pmu)
  * UNKNOWN at reset, the PMU must be explicitly reset to avoid reading
  * junk values out of them.
  */
-static int cpu_pmu_notify(struct notifier_block *b,
+static int __cpuinit cpu_pmu_notify(struct notifier_block *b,
 				    unsigned long action, void *hcpu)
 {
 	int irq;
@@ -1583,7 +1583,7 @@ static int cpu_pmu_notify(struct notifier_block *b,
 	return ret;
 }
 
-static struct notifier_block cpu_pmu_hotplug_notifier = {
+static struct notifier_block __cpuinitdata cpu_pmu_hotplug_notifier = {
 	.notifier_call = cpu_pmu_notify,
 };
 
@@ -1642,6 +1642,9 @@ static struct notifier_block perf_cpu_pm_notifier_block = {
  */
 static struct of_device_id armpmu_of_device_ids[] = {
 	{.compatible = "arm,armv8-pmuv3"},
+#ifdef CONFIG_ARCH_MSM8996
+	{.compatible = "qcom,kryo-pmuv3", .data = kryo_pmu_init},
+#endif
 	{},
 };
 

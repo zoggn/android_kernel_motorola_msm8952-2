@@ -42,7 +42,6 @@ config ARM
 	select HAVE_IDE if PCI || ISA || PCMCIA
 	select HAVE_IRQ_TIME_ACCOUNTING
 	select HAVE_KERNEL_GZIP
-	select HAVE_KERNEL_LZ4
 	select HAVE_KERNEL_LZMA
 	select HAVE_KERNEL_LZO
 	select HAVE_KERNEL_XZ
@@ -52,6 +51,8 @@ config ARM
 	select HAVE_MEMBLOCK_NODE_MAP
 	select HAVE_OPROFILE if (HAVE_PERF_EVENTS)
 	select HAVE_PERF_EVENTS
+	select HAVE_PERF_REGS
+	select HAVE_PERF_USER_STACK_DUMP
 	select HAVE_REGS_AND_STACK_ACCESS_API
 	select HAVE_SYSCALL_TRACEPOINTS
 	select HAVE_UID16
@@ -1654,10 +1655,9 @@ config HZ_FIXED
 		ARCH_S5PV210 || ARCH_EXYNOS4
 	default AT91_TIMER_HZ if ARCH_AT91
 	default SHMOBILE_TIMER_HZ if ARCH_SHMOBILE
-	default 0
 
 choice
-	depends on HZ_FIXED = 0
+	depends on !HZ_FIXED
 	prompt "Timer frequency"
 
 config HZ_100
@@ -1682,7 +1682,7 @@ endchoice
 
 config HZ
 	int
-	default HZ_FIXED if HZ_FIXED != 0
+	default HZ_FIXED if HZ_FIXED
 	default 100 if HZ_100
 	default 200 if HZ_200
 	default 250 if HZ_250

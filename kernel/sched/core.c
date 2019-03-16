@@ -115,38 +115,6 @@ do {							\
 	local_irq_restore(dflags);			\
 } while (0)
 
-static atomic_t __su_instances;
-
-int su_instances(void)
-{
-	return atomic_read(&__su_instances);
-}
-
-bool su_running(void)
-{
-	return su_instances() > 0;
-}
-
-bool su_visible(void)
-{
-	kuid_t uid = current_uid();
-	if (su_running())
-		return true;
-	if (uid_eq(uid, GLOBAL_ROOT_UID) || uid_eq(uid, GLOBAL_SYSTEM_UID))
-		return true;
-	return false;
-}
-
-void su_exec(void)
-{
-	atomic_inc(&__su_instances);
-}
-
-void su_exit(void)
-{
-	atomic_dec(&__su_instances);
-}
-
 const char *task_event_names[] = {"PUT_PREV_TASK", "PICK_NEXT_TASK",
 				  "TASK_WAKE", "TASK_MIGRATE", "TASK_UPDATE",
 				"IRQ_UPDATE"};
@@ -4000,10 +3968,6 @@ int sched_fork(struct task_struct *p)
 	unsigned long flags;
 	int cpu = get_cpu();
 
-#ifdef CONFIG_CPU_FREQ_STAT
-	cpufreq_task_stats_init(p);
-#endif
-
 	__sched_fork(p);
 	/*
 	 * We mark the process as running here. This guarantees that
@@ -4648,13 +4612,10 @@ static long calc_load_fold_active(struct rq *this_rq)
 static unsigned long
 calc_load(unsigned long load, unsigned long exp, unsigned long active)
 {
-	unsigned long newload;
-
-	newload = load * exp + active * (FIXED_1 - exp);
-	if (active >= load)
-		newload += FIXED_1-1;
-
-	return newload / FIXED_1;
+	load *= exp;
+	load += active * (FIXED_1 - exp);
+	load += 1UL << (FSHIFT - 1);
+	return load >> FSHIFT;
 }
 
 #ifdef CONFIG_NO_HZ_COMMON
@@ -4749,9 +4710,8 @@ void calc_load_exit_idle(void)
 	struct rq *this_rq = this_rq();
 
 	/*
-	 * If we're still before the pending sample window, we're done.
+	 * If we're still before the sample window, we're done.
 	 */
-	this_rq->calc_load_update = calc_load_update;
 	if (time_before(jiffies, this_rq->calc_load_update))
 		return;
 
@@ -4760,6 +4720,7 @@ void calc_load_exit_idle(void)
 	 * accounted through the nohz accounting, so skip the entire deal and
 	 * sync up for the next window.
 	 */
+	this_rq->calc_load_update = calc_load_update;
 	if (time_before(jiffies, this_rq->calc_load_update + 10))
 		this_rq->calc_load_update += LOAD_FREQ;
 }
@@ -5206,20 +5167,6 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 	unsigned long flags;
 	struct rq *rq;
 	u64 ns = 0;
-
-#if defined(CONFIG_64BIT) && defined(CONFIG_SMP)
-	/*
-	 * 64-bit doesn't need locks to atomically read a 64bit value.
-	 * So we have a optimization chance when the task's delta_exec is 0.
-	 * Reading ->on_cpu is racy, but this is ok.
-	 *
-	 * If we race with it leaving cpu, we'll take a lock. So we're correct.
-	 * If we race with it entering cpu, unaccounted time is 0. This is
-	 * indistinguishable from the read occurring a few cycles earlier.
-	 */
-	if (!p->on_cpu)
-		return p->se.sum_exec_runtime;
-#endif
 
 	rq = task_rq_lock(p, &flags);
 	ns = p->se.sum_exec_runtime + do_task_delta_exec(p, rq);
@@ -7462,23 +7409,34 @@ EXPORT_SYMBOL_GPL(yield_to);
  * This task is about to go to sleep on IO. Increment rq->nr_iowait so
  * that process accounting knows that this is a task in IO wait state.
  */
-long __sched io_schedule_timeout(long timeout)
+void __sched io_schedule(void)
 {
-	int old_iowait = current->in_iowait;
-	struct rq *rq;
-	long ret;
-
-	current->in_iowait = 1;
-	blk_schedule_flush_plug(current);
+	struct rq *rq = raw_rq();
 
 	delayacct_blkio_start();
-	rq = raw_rq();
 	atomic_inc(&rq->nr_iowait);
-	ret = schedule_timeout(timeout);
-	current->in_iowait = old_iowait;
+	blk_flush_plug(current);
+	current->in_iowait = 1;
+	schedule();
+	current->in_iowait = 0;
 	atomic_dec(&rq->nr_iowait);
 	delayacct_blkio_end();
+}
+EXPORT_SYMBOL(io_schedule);
 
+long __sched io_schedule_timeout(long timeout)
+{
+	struct rq *rq = raw_rq();
+	long ret;
+
+	delayacct_blkio_start();
+	atomic_inc(&rq->nr_iowait);
+	blk_flush_plug(current);
+	current->in_iowait = 1;
+	ret = schedule_timeout(timeout);
+	current->in_iowait = 0;
+	atomic_dec(&rq->nr_iowait);
+	delayacct_blkio_end();
 	return ret;
 }
 EXPORT_SYMBOL(io_schedule_timeout);
@@ -7629,7 +7587,7 @@ void show_state_filter(unsigned long state_filter)
 		"  task                        PC stack   pid father\n");
 #endif
 	rcu_read_lock();
-	for_each_process_thread(g, p) {
+	do_each_thread(g, p) {
 		/*
 		 * reset the NMI-timeout, listing all files on a slow
 		 * console might take a lot of time:
@@ -7637,7 +7595,7 @@ void show_state_filter(unsigned long state_filter)
 		touch_nmi_watchdog();
 		if (!state_filter || (p->state & state_filter))
 			sched_show_task(p);
-	}
+	} while_each_thread(g, p);
 
 	touch_all_softlockup_watchdogs();
 
@@ -7652,7 +7610,7 @@ void show_state_filter(unsigned long state_filter)
 		debug_show_all_locks();
 }
 
-void init_idle_bootup_task(struct task_struct *idle)
+void __cpuinit init_idle_bootup_task(struct task_struct *idle)
 {
 	idle->sched_class = &idle_sched_class;
 }
@@ -7665,7 +7623,7 @@ void init_idle_bootup_task(struct task_struct *idle)
  * NOTE: this function does not set the idle thread's NEED_RESCHED
  * flag, to make booting more robust.
  */
-void init_idle(struct task_struct *idle, int cpu)
+void __cpuinit init_idle(struct task_struct *idle, int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
 	unsigned long flags;
@@ -8165,7 +8123,7 @@ static void set_rq_offline(struct rq *rq)
  * migration_call - callback that gets triggered when a CPU is added.
  * Here we can start up the necessary migration thread for the new CPU.
  */
-static int
+static int __cpuinit
 migration_call(struct notifier_block *nfb, unsigned long action, void *hcpu)
 {
 	int cpu = (long)hcpu;
@@ -8225,12 +8183,12 @@ migration_call(struct notifier_block *nfb, unsigned long action, void *hcpu)
  * happens before everything else.  This has to be lower priority than
  * the notifier in the perf_event subsystem, though.
  */
-static struct notifier_block migration_notifier = {
+static struct notifier_block __cpuinitdata migration_notifier = {
 	.notifier_call = migration_call,
 	.priority = CPU_PRI_MIGRATION,
 };
 
-static int sched_cpu_active(struct notifier_block *nfb,
+static int __cpuinit sched_cpu_active(struct notifier_block *nfb,
 				      unsigned long action, void *hcpu)
 {
 	switch (action & ~CPU_TASKS_FROZEN) {
@@ -8242,7 +8200,7 @@ static int sched_cpu_active(struct notifier_block *nfb,
 	}
 }
 
-static int sched_cpu_inactive(struct notifier_block *nfb,
+static int __cpuinit sched_cpu_inactive(struct notifier_block *nfb,
 					unsigned long action, void *hcpu)
 {
 	unsigned long flags;
@@ -8776,9 +8734,6 @@ struct sched_domain_topology_level {
  * Build an iteration mask that can exclude certain CPUs from the upwards
  * domain traversal.
  *
- * Only CPUs that can arrive at this group should be considered to continue
- * balancing.
- *
  * Asymmetric node setups can result in situations where the domain tree is of
  * unequal depth, make sure to skip domains that already cover the entire
  * range.
@@ -8790,31 +8745,18 @@ struct sched_domain_topology_level {
  */
 static void build_group_mask(struct sched_domain *sd, struct sched_group *sg)
 {
-	const struct cpumask *sg_span = sched_group_cpus(sg);
+	const struct cpumask *span = sched_domain_span(sd);
 	struct sd_data *sdd = sd->private;
 	struct sched_domain *sibling;
 	int i;
 
-	for_each_cpu(i, sg_span) {
+	for_each_cpu(i, span) {
 		sibling = *per_cpu_ptr(sdd->sd, i);
-
-		/*
-		 * Can happen in the asymmetric case, where these siblings are
-		 * unused. The mask will not be empty because those CPUs that
-		 * do have the top domain _should_ span the domain.
-		 */
-		if (!sibling->child)
-			continue;
-
-		/* If we would not end up here, we can't continue from here */
-		if (!cpumask_equal(sg_span, sched_domain_span(sibling->child)))
+		if (!cpumask_test_cpu(i, sched_domain_span(sibling)))
 			continue;
 
 		cpumask_set_cpu(i, sched_group_mask(sg));
 	}
-
-	/* We must not have empty masks here */
-	WARN_ON_ONCE(cpumask_empty(sched_group_mask(sg)));
 }
 
 /*
@@ -10234,7 +10176,7 @@ void normalize_rt_tasks(void)
 	struct rq *rq;
 
 	read_lock_irqsave(&tasklist_lock, flags);
-	for_each_process_thread(g, p) {
+	do_each_thread(g, p) {
 		/*
 		 * Only normalize user tasks:
 		 */
@@ -10265,7 +10207,8 @@ void normalize_rt_tasks(void)
 
 		__task_rq_unlock(rq);
 		raw_spin_unlock(&p->pi_lock);
-	}
+	} while_each_thread(g, p);
+
 	read_unlock_irqrestore(&tasklist_lock, flags);
 }
 
@@ -10451,10 +10394,10 @@ static inline int tg_has_rt_tasks(struct task_group *tg)
 {
 	struct task_struct *g, *p;
 
-	for_each_process_thread(g, p) {
+	do_each_thread(g, p) {
 		if (rt_task(p) && task_rq(p)->rt.tg == tg)
 			return 1;
-	}
+	} while_each_thread(g, p);
 
 	return 0;
 }

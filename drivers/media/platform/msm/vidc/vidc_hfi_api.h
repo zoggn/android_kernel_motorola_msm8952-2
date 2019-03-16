@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -225,7 +225,6 @@ enum hal_property {
 	HAL_PARAM_VENC_MBI_STATISTICS_MODE,
 	HAL_PARAM_VENC_BITRATE_TYPE,
 	HAL_PARAM_VENC_VIDEO_SIGNAL_INFO,
-	HAL_PARAM_VENC_CONSTRAINED_INTRA_PRED,
 	HAL_PARAM_VENC_IFRAMESIZE_TYPE,
 };
 
@@ -1329,6 +1328,10 @@ struct vidc_hal_sys_init_done {
 
 struct vidc_hal_session_init_done {
 	struct msm_vidc_capability capability;
+};
+
+struct vidc_hal_session_flush_done {
+	enum hal_flush flush_type;
 };
 
 enum msm_vidc_hfi_type {

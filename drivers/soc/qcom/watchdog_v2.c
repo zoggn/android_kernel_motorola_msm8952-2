@@ -748,8 +748,8 @@ static int msm_watchdog_probe(struct platform_device *pdev)
 	cpumask_clear(&wdog_dd->alive_mask);
 	INIT_WORK(&wdog_dd->init_dogwork_struct, init_watchdog_work);
 	INIT_DELAYED_WORK(&wdog_dd->dogwork_struct, pet_watchdog_work);
-	g_wdog_dd = wdog_dd;
 	queue_work(wdog_wq, &wdog_dd->init_dogwork_struct);
+	g_wdog_dd = wdog_dd;
 	return 0;
 err:
 	destroy_workqueue(wdog_wq);

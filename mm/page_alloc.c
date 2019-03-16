@@ -962,7 +962,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 		if (is_migrate_cma(migratetype))
 			area->nr_free_cma--;
 		expand(zone, page, order, current_order, area, migratetype);
-                set_freepage_migratetype(page, migratetype);
+		set_freepage_migratetype(page, migratetype);
 		return page;
 	}
 
@@ -1130,11 +1130,10 @@ __rmqueue_fallback(struct zone *zone, int order, int start_migratetype)
 	int current_order;
 	struct page *page;
 
-	int i = 0;
-
 	/* Find the largest possible block of pages in the other list */
 	for (current_order = MAX_ORDER-1; current_order >= order;
 						--current_order) {
+		int i;
 		for (i = 0;; i++) {
 			int migratetype = fallbacks[start_migratetype][i];
 			int buddy_type = start_migratetype;
@@ -1165,7 +1164,8 @@ __rmqueue_fallback(struct zone *zone, int order, int start_migratetype)
 				 * free pages.
 				 */
 				buddy_type = migratetype;
-			}			
+			}
+
 			/* Remove the page from the freelists */
 			list_del(&page->lru);
 			rmv_page_order(page);
@@ -1279,7 +1279,6 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 			list_add(&page->lru, list);
 		else
 			list_add_tail(&page->lru, list);
-		
 		list = &page->lru;
 		if (is_migrate_cma(get_freepage_migratetype(page)))
 			__mod_zone_page_state(zone, NR_FREE_CMA_PAGES,

@@ -103,14 +103,6 @@ static u32 mdss_fb_pseudo_palette[16] = {
 
 static struct msm_mdp_interface *mdp_instance;
 
-enum fb_unblank_bl_delay {
-	FB_UNBLANK_NO_BL_DELAY,
-	FB_UNBLANK_READY_TO_UPDATE_BL,
-	FB_UNBLANK_DELAY_BL_TWO_FRAMES,
-};
-static enum fb_unblank_bl_delay fb_unblank;
-static void mdss_fb_unblank_bl_fallback(struct work_struct *work);
-
 static int mdss_fb_register(struct msm_fb_data_type *mfd);
 static int mdss_fb_open(struct fb_info *info, int user);
 static int mdss_fb_release(struct fb_info *info, int user);
@@ -982,7 +974,7 @@ static int __maybe_unused mdss_fb_set_param(struct device *dev,
 	struct fb_info *fbi = dev_get_drvdata(dev);
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
 	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
-        struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
+	struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
 	struct panel_param *param;
 	const char *val_name;
 	int ret = -EINVAL;
@@ -1019,7 +1011,7 @@ static int __maybe_unused mdss_fb_set_param(struct device *dev,
 		}
 		param->value = value;
 		mutex_unlock(&mfd->bl_lock);
-                goto unlock;
+		goto unlock;
 	}
 
 	if (mdss_fb_is_power_on(mfd))
@@ -1051,21 +1043,21 @@ static void mdss_fb_restore_param_hbm(struct msm_fb_data_type *mfd)
 {
 	struct mdss_panel_info *pinfo = mfd->panel_info;
 	struct panel_param *param;
-        struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
+	struct mdss_panel_data *pdata = dev_get_platdata(&mfd->pdev->dev);
 
 	param = pinfo->param[PARAM_HBM_ID];
 	if (!param || !pinfo->hbm_restore)
 		return;
 
 	mutex_lock(&mfd->param_lock);
-        mutex_lock(&mfd->bl_lock);
+	mutex_lock(&mfd->bl_lock);
 
 	pinfo->hbm_restore = false;
 	mdss_fb_set_hw_param(mfd, PARAM_HBM_ID, param->value);
 	if (pdata && pdata->set_backlight)
 		pdata->set_backlight(pdata, HBM_BRIGHTNESS(param->value));
 
-        mutex_unlock(&mfd->bl_lock);
+	mutex_unlock(&mfd->bl_lock);
 	mutex_unlock(&mfd->param_lock);
 }
 
@@ -1094,7 +1086,7 @@ __PARAM_SYSFS_DEFINITION(cabc, PARAM_CABC_ID)
 
 static struct device_attribute param_attrs[PARAM_ID_NUM] = {
 	__ATTR(hbm, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP, hbm_show, hbm_store),
-	__ATTR(cabc_mode, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP,
+	__ATTR(cabc, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP,
 		cabc_show, cabc_store),
 };
 
@@ -1391,7 +1383,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 			pr_err("failed to register input handler\n");
 
 	INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
-	INIT_DELAYED_WORK(&mfd->unblank_bl_work, mdss_fb_unblank_bl_fallback);
+
 	return rc;
 }
 
@@ -1702,9 +1694,6 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 		mfd->unset_bl_level = U32_MAX;
 	}
 
-	if (fb_unblank != FB_UNBLANK_NO_BL_DELAY)
-	return;
-
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
 	if ((pdata) && (pdata->set_backlight)) {
@@ -1742,8 +1731,8 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 	struct mdss_panel_data *pdata;
 	u32 temp;
 	bool bl_notify = false;
- 
-        mdss_fb_restore_param_hbm(mfd);
+
+	mdss_fb_restore_param_hbm(mfd);
 
 	if (mfd->unset_bl_level == U32_MAX)
 		return;
@@ -2009,7 +1998,6 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
-		fb_unblank = FB_UNBLANK_DELAY_BL_TWO_FRAMES;
 		ret = mdss_fb_blank_unblank(mfd);
 		break;
 	case BLANK_FLAG_ULP:
@@ -2201,7 +2189,7 @@ int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd, size_t fb_size)
 			ion_unmap_iommu(mfd->fb_ion_client, mfd->fb_ion_handle,
 					mfd->mdp.fb_mem_get_iommu_domain(), 0);
 		}
-		goto err_put;
+		goto fb_mmap_failed;
 	}
 
 	pr_debug("alloc 0x%zuB vaddr = %pK (%pa iova) for fb%d\n", fb_size,
@@ -2213,8 +2201,6 @@ int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd, size_t fb_size)
 
 	return rc;
 
-err_put:
-	dma_buf_put(mfd->fbmem_buf);
 fb_mmap_failed:
 	ion_free(mfd->fb_ion_client, mfd->fb_ion_handle);
 	mfd->fb_ion_handle = NULL;
@@ -3487,22 +3473,10 @@ static void mdss_panelinfo_to_fb_var(struct mdss_panel_info *pinfo,
 		v_total = var->yres + var->lower_margin
 			+ var->upper_margin + var->vsync_len;
 		clk_rate = h_total * v_total * frame_rate;
-		if (clk_rate)
-			var->pixclock = KHZ2PICOS(clk_rate / 1000);
+		var->pixclock = KHZ2PICOS(clk_rate / 1000);
 	} else if (pinfo->clk_rate) {
 		var->pixclock = KHZ2PICOS(
 				(unsigned long int) pinfo->clk_rate / 1000);
-	}
-}
-
-static void mdss_fb_unblank_bl_fallback(struct work_struct *work)
-{
-	struct msm_fb_data_type *mfd = container_of(work,
-						struct msm_fb_data_type,
-						unblank_bl_work.work);
-	if (fb_unblank == FB_UNBLANK_READY_TO_UPDATE_BL) {
-		fb_unblank = FB_UNBLANK_NO_BL_DELAY;
-		mdss_fb_update_backlight(mfd);
 	}
 }
 
@@ -3553,22 +3527,8 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 			pr_err("pan display failed %x on fb%d\n", ret,
 					mfd->index);
 	}
-	/*
-	 * Don't enable backlight after unblank until after 2nd frame
-	 * is committed in order to ensure that display contents are
-	 * defined and the display is fully powered on and ready to
-	 * render the frame contents.
-	 */
-	if (fb_unblank == FB_UNBLANK_DELAY_BL_TWO_FRAMES) {
-		cancel_delayed_work_sync(&mfd->unblank_bl_work);
-		fb_unblank = FB_UNBLANK_READY_TO_UPDATE_BL;
-		/* Enable backlight if next commit doesn't come within 15ms */
-		schedule_delayed_work(&mfd->unblank_bl_work,
-					msecs_to_jiffies(15));
-	} else if (!ret) {
-		fb_unblank = FB_UNBLANK_NO_BL_DELAY;
+	if (!ret)
 		mdss_fb_update_backlight(mfd);
-	}
 
 	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed) {
 		mdss_fb_release_kickoff(mfd);

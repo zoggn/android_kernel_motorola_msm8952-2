@@ -709,7 +709,8 @@ static int time_cpufreq_notifier(struct notifier_block *nb, unsigned long val,
 		tsc_khz_ref = tsc_khz;
 	}
 	if ((val == CPUFREQ_PRECHANGE  && freq->old < freq->new) ||
-			(val == CPUFREQ_POSTCHANGE && freq->old > freq->new)) {
+			(val == CPUFREQ_POSTCHANGE && freq->old > freq->new) ||
+			(val == CPUFREQ_RESUMECHANGE)) {
 		*lpj = cpufreq_scale(loops_per_jiffy_ref, ref_freq, freq->new);
 
 		tsc_khz = cpufreq_scale(tsc_khz_ref, ref_freq, freq->new);
@@ -823,7 +824,7 @@ static void __init check_system_tsc_reliable(void)
  * Make an educated guess if the TSC is trustworthy and synchronized
  * over all CPUs.
  */
-int unsynchronized_tsc(void)
+__cpuinit int unsynchronized_tsc(void)
 {
 	if (!cpu_has_tsc || tsc_unstable)
 		return 1;
@@ -1022,7 +1023,7 @@ void __init tsc_init(void)
  * been calibrated. This assumes that CONSTANT_TSC applies to all
  * cpus in the socket - this should be a safe assumption.
  */
-unsigned long calibrate_delay_is_known(void)
+unsigned long __cpuinit calibrate_delay_is_known(void)
 {
 	int i, cpu = smp_processor_id();
 
